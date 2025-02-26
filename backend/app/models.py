@@ -1,9 +1,12 @@
 from datetime import datetime
 from enum import Enum
 from typing import List
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Enum as SQLEnum, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Enum as SQLEnum, Boolean, Float, Text
 from sqlalchemy.orm import relationship
-from database import Base
+from app import db
+
+# Use SQLAlchemy's declarative base
+Base = db.Model
 
 class ProjectType(str, Enum):
     MINING = "mining"
@@ -181,3 +184,99 @@ class Skill(Base):
     last_used_date = Column(DateTime)
     
     electrician = relationship("Electrician", back_populates="skills")
+
+class UserRole(str, Enum):
+    HIRER = "hirer"
+    OPERATOR = "operator"
+    ADMIN = "admin"
+
+class RFQStatus(str, Enum):
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    DECLINED = "declined"
+    EXPIRED = "expired"
+
+class ModerationStatus(str, Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+class User(Base):
+    __tablename__ = 'users'
+    
+    id = Column(Integer, primary_key=True)
+    email = Column(String(255), unique=True, nullable=False)
+    password_hash = Column(String(255), nullable=False)
+    role = Column(SQLEnum(UserRole), nullable=False)
+    full_name = Column(String(255), nullable=False)
+    phone = Column(String(20))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    deleted_at = Column(DateTime)
+    
+    # Relationship
+    operator = relationship("Operator", back_populates="user", uselist=False)
+
+class Operator(Base):
+    __tablename__ = 'operators'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    business_name = Column(String(255), nullable=False, unique=True)
+    abn = Column(String(11))
+    description = Column(Text)
+    
+    # Replace PostGIS Geography with simple lat/long
+    latitude = Column(Float, nullable=False)
+    longitude = Column(Float, nullable=False)
+    
+    service_radius = Column(Integer, nullable=False)  # in meters
+    operating_hours = Column(String)  # JSON string
+    website = Column(String(255))
+    address_line1 = Column(String(255), nullable=False)
+    address_line2 = Column(String(255))
+    suburb = Column(String(100), nullable=False)
+    state = Column(String(50), nullable=False)
+    postcode = Column(String(10), nullable=False)
+    moderation_status = Column(SQLEnum(ModerationStatus), nullable=False, default=ModerationStatus.PENDING)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    deleted_at = Column(DateTime)
+
+    # Relationship
+    user = relationship("User", back_populates="operator")
+    equipment = relationship("Equipment", back_populates="operator")
+
+class EquipmentCategory(Base):
+    __tablename__ = 'equipment_categories'
+    
+    id = Column(Integer, primary_key=True)
+    parent_id = Column(Integer, ForeignKey('equipment_categories.id'))
+    name = Column(String(100), nullable=False, unique=True)
+    description = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Self-referential relationship
+    parent = relationship("EquipmentCategory", remote_side=[id], backref="subcategories")
+    equipment = relationship("Equipment", back_populates="category")
+
+class Equipment(Base):
+    __tablename__ = 'equipment'
+    
+    id = Column(Integer, primary_key=True)
+    operator_id = Column(Integer, ForeignKey('operators.id'), nullable=False)
+    category_id = Column(Integer, ForeignKey('equipment_categories.id'), nullable=False)
+    name = Column(String(255), nullable=False)
+    description = Column(Text)
+    specifications = Column(String)  # JSON string
+    daily_rate = Column(Float)
+    weekly_rate = Column(Float)
+    monthly_rate = Column(Float)
+    availability_status = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    operator = relationship("Operator", back_populates="equipment")
+    category = relationship("EquipmentCategory", back_populates="equipment")

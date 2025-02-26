@@ -1,5 +1,7 @@
-from flask import Flask, request
+from flask import Flask, request, jsonify
 from flask_cors import CORS
+from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
 from dotenv import load_dotenv
 import os
 import logging
@@ -11,14 +13,31 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Initialize extensions
+db = SQLAlchemy()
+migrate = Migrate()
+
 def create_app():
     app = Flask(__name__)
     
     # Configure the Flask application
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev')
+    app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'postgresql://postgres:postgres@localhost/equipmentcentral')
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
     # Initialize CORS
     CORS(app)
+    
+    # Initialize extensions
+    db.init_app(app)
+    migrate.init_app(app, db)
+    
+    # Import models to ensure they are registered with SQLAlchemy
+    from .models import User, Operator, EquipmentCategory, Equipment
+    
+    # Register blueprints
+    from .routes import api
+    app.register_blueprint(api, url_prefix='/api')
 
     # Log requests
     @app.before_request
